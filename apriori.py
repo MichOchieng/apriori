@@ -1,25 +1,35 @@
 import re
+import sys
+from math import ceil
 from collections import Counter
 from itertools   import combinations
-class Results:
-    def __init__(self) -> None:
-        pass
+from timeit import default_timer as timer
 
 class Apriori:
     NUM_TRANSACTIONS = int
+    SUPPORT_LEVEL = int
     SUPPORT = int
     ITEMSET = set()
     DATASET = {}
     TABLE   = {}
     FINAL_TABLE = {}
 
-    def __init__(self,filename,support) -> None:
-        self.SUPPORT = support
-        self.readFile(filename)
+    def __init__(self) -> None:
+        try:
+            self.SUPPORT_LEVEL = int(sys.argv[2])
+        except ValueError:
+            print(sys.argv[2], 'is not a number!')
+            exit()
+        except IndexError:
+            print('Make sure you enter the filepath and support level!')
+            exit()
+        self.readFile(sys.argv[1])
         self.initTable()
-        self.apriori(self.TABLE,1)
-        # print(list(combinations(self.TABLE,2)))
-        # print(self.combine(self.TABLE,1))
+        t0 = timer()
+        self.FINAL_TABLE = self.apriori(self.TABLE,1)
+        t1 = timer()
+        totRunTime = t1-t0
+        print(totRunTime)
         
 
     def initTable(self):
@@ -27,7 +37,7 @@ class Apriori:
         for key in self.DATASET:
             counts = counts + Counter(self.DATASET[key])
         self.TABLE = dict(counts)
-        print('Initial table: ',self.TABLE)
+        # print('Initial table: ',self.TABLE)
 
     def addSupports(self,table) -> dict:
         for dbKey in self.DATASET:
@@ -50,19 +60,19 @@ class Apriori:
                 del table[key]
         return table
 
-    def apriori(self,table,k):
+    def apriori(self,table,k) -> dict:
         # Create next table
         #   Get combinations for next table
         #   Create new Dictionary for combinations
         #   Add supports to dictionary        
         sets = self.createSets(table,k)
-        print('Sets: ',sets)
+        # print('Sets: ',sets)
         nextTable = dict.fromkeys(sets,0)
         nextTable = self.addSupports(nextTable)
-        print("New Table: ",nextTable)
+        # print("New Table: ",nextTable)
         # Prune table
         nextTable = self.prune(nextTable)
-        print("Pruned next Table: ",nextTable,'\n')
+        # print("Pruned next Table: ",nextTable,'\n')
         if len(nextTable) > 0 and k < len(self.TABLE) + 1:
             k+=1
             self.apriori(nextTable,k)
@@ -78,13 +88,19 @@ class Apriori:
                 # Parse Transactions after first line in file
                     # Strip newline from end of string
                     # Split string into list of ints 
-                for line in lines[1:]: # Skip the first line, num transactions not important
+                # Init num transactions
+                self.NUM_TRANSACTIONS = int(lines[0])
+                # Init support
+                self.SUPPORT = ceil(self.NUM_TRANSACTIONS * (self.SUPPORT_LEVEL / 100))
+                print("Support level: ",self.SUPPORT)
+                for line in lines[1:]:
                     row = re.split(r'\t+',line)
                     items = row[-1].rstrip('\r\n')
                     itemList = items.split()
                     self.DATASET[row[0]] = itemList
-            print('Initial dataset: ',self.DATASET)
+            # print('Initial dataset: ',self.DATASET)
         except FileNotFoundError:
-            print("Couldn't find",file)
+            print("Couldn't find file:",file,':(')
+            exit()
 
-test = Apriori('./Datasets/data.txt',2)
+Apriori()
