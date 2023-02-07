@@ -1,7 +1,6 @@
 import re
 from collections import Counter
-from itertools   import combinations, product
-
+from itertools   import combinations
 class Results:
     def __init__(self) -> None:
         pass
@@ -18,9 +17,10 @@ class Apriori:
         self.SUPPORT = support
         self.readFile(filename)
         self.initTable()
-        self.run(self.TABLE,1)
+        self.apriori(self.TABLE,1)
         # print(list(combinations(self.TABLE,2)))
         # print(self.combine(self.TABLE,1))
+        
 
     def initTable(self):
         counts = Counter()
@@ -29,32 +29,46 @@ class Apriori:
         self.TABLE = dict(counts)
         print('Initial table: ',self.TABLE)
 
-    def run(self,table,k):
-        if len(table) > 1 and k < len(self.TABLE) + 1:
-            # Create next table
-            #   Get combinations for next table
-            #   Create new Dictionary for combinations
-            #   Add supports to dictionary
-            setItems = set([val for key in table for val in key])
-            sets = list(combinations(setItems,k))
-            print("Sets: ",sets)
-            newDict = dict.fromkeys(sets,0)
+    def addSupports(self,table) -> dict:
+        for dbKey in self.DATASET:
+            for key in table:
+                if set(key).issubset(self.DATASET[dbKey]):
+                    table[key]+=1
+        return table
+        
 
-            for dbKey in self.DATASET:
-                for key in newDict:
-                    if set(key).issubset(self.DATASET[dbKey]):
-                        newDict[key]+=1
-            print("New Table: ",newDict)
-            tempTable = newDict.copy()
-            # Prune table
-            for key in tempTable:
-                if tempTable[key] < self.SUPPORT:
-                    del newDict[key]
-            print("Pruned Table: ",newDict,'\n')
+    def createSets(self,table,k) -> list:
+        # Create a set of all unique table values
+        setItems = set(value for key in table for value in key)
+        # Return a list of combinations of size k given the above set items
+        return list(combinations(setItems,k))
+
+    def prune(self,table) -> dict:
+        iterTable = table.copy()
+        for key in iterTable:
+            if iterTable[key] < self.SUPPORT:
+                del table[key]
+        return table
+
+    def apriori(self,table,k):
+        # Create next table
+        #   Get combinations for next table
+        #   Create new Dictionary for combinations
+        #   Add supports to dictionary        
+        sets = self.createSets(table,k)
+        print('Sets: ',sets)
+        nextTable = dict.fromkeys(sets,0)
+        nextTable = self.addSupports(nextTable)
+        print("New Table: ",nextTable)
+        # Prune table
+        nextTable = self.prune(nextTable)
+        print("Pruned next Table: ",nextTable,'\n')
+        if len(nextTable) > 0 and k < len(self.TABLE) + 1:
             k+=1
-            self.run(newDict,k)
-
-
+            self.apriori(nextTable,k)
+        else:
+            print('Final table: ',table)
+            return table
 
     def readFile(self,file:str): 
         try:
@@ -73,4 +87,4 @@ class Apriori:
         except FileNotFoundError:
             print("Couldn't find",file)
 
-test = Apriori('test.txt',2)
+test = Apriori('./Datasets/data.txt',2)
