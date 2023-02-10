@@ -5,14 +5,64 @@ from collections import Counter
 from itertools   import combinations
 from timeit import default_timer as timer
 
-class Apriori:
-    NUM_TRANSACTIONS = int
+class Table:
+    TABLE         = {}
     SUPPORT_LEVEL = int
-    SUPPORT = int
-    ITEMSET = set()
-    DATASET = {}
-    TABLE   = {}
-    FINAL_TABLE = {}
+    DATABASE      = list
+
+    def __init__(self,db,minSup) -> None:
+        self.DATABASE = db
+        self.SUPPORT_LEVEL = minSup
+
+    # Creates the first table C1
+    def initTable(self):
+        for item in self.DATABASE:
+            for i in range(len(item)):
+                tempSet = frozenset([item[i]]) 
+                # Checks to see if itemset is in the table
+                if tempSet not in self.TABLE: # Add to table
+                    self.TABLE[tempSet] = 1 
+                else: # Increase count/support level
+                    self.TABLE[tempSet] += 1            
+
+    # Joins itemssets
+    def createNextTable(self):
+        nextTable = {}
+        # Get list of itemsets
+        keys = list(self.TABLE.keys())
+        # Join itemsets
+        for i in range(len(keys)):
+            for j in range(i+1,len(keys)):
+                newKey = set()
+                set0 = keys[i]
+                set1 = keys[j]
+
+                # Pruning
+                if self.TABLE[set0] >= self.SUPPORT_LEVEL and self.TABLE[set1] >= self.SUPPORT_LEVEL:
+                    newKey = set0.union(set1)
+                # Check for infrequent subset
+                # Only add newKey if not an infrequent subset
+                for item in newKey:
+                    subset = newKey - {item}
+                    if subset not in keys or self.TABLE[subset] < self.SUPPORT_LEVEL:
+                        break
+                nextTable[frozenset(newKey)] = 0
+        self.TABLE = nextTable
+
+    # Adds supports
+    def fillTable(self):
+        for item in self.DATABASE:
+            for key in self.TABLE.keys():
+                if key.issubset(item):
+                    self.TABLE[key] += 1
+
+    def getTable(self) -> dict:
+        return self.TABLE
+    
+class Apriori:
+    SUPPORT      = int
+    TRANSACTIONS = []
+    FINAL_TABLE  = Table
 
     def __init__(self) -> None:
         try:
@@ -23,12 +73,23 @@ class Apriori:
         except IndexError:
             print('Make sure you enter the filepath and support level!')
             exit()
+        # Read in transactions from file
         self.readFile(sys.argv[1])
-        self.initTable()
-        t0 = timer()
-        self.FINAL_TABLE = self.apriori(self.TABLE,1)
-        t1 = timer()
-        self.getRunTime(t0,t1)
+        # Create first table from transactions
+        table = Table(self.TRANSACTIONS,self.SUPPORT)
+        table.initTable()
+        print(table.getTable())
+        # Begin loop
+        table.createNextTable()
+        table.fillTable()
+        print(table.getTable())
+        # done = False
+        # while not done:
+        #     pass
+        # t0 = timer()
+        # self.FINAL_TABLE = self.apriori(self.TABLE,1)
+        # t1 = timer()
+        # self.getRunTime(t0,t1)
         
 
     def initTable(self):
@@ -100,13 +161,10 @@ class Apriori:
                 self.SUPPORT = floor(self.NUM_TRANSACTIONS * (self.SUPPORT_LEVEL / 100))
                 print("Support level: ",self.SUPPORT)
                 for line in lines[1:]:
-                    row = re.split(r'\t+',line)
-                    items = row[-1].rstrip('\r\n')
-                    itemList = items.split()
-                    self.DATASET[row[0]] = itemList
-            print('Initial dataset: ',self.DATASET)
+                    row = re.split(r'\t+',line)[-1].rstrip('\r\n').split()
+                    self.TRANSACTIONS.append(row)
+            print('Transactions: ',self.TRANSACTIONS)
         except FileNotFoundError:
             print("Couldn't find file:",file,':(')
             exit()
-
 Apriori()
