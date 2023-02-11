@@ -1,14 +1,13 @@
 import re
 import sys
-from math import floor
-from collections import Counter
-from itertools   import combinations
 from timeit import default_timer as timer
+from itertools import chain, combinations
 
 class Table:
     TABLE         = {}
     SUPPORT_LEVEL = int
     DATABASE      = list
+    SUPPORT_TABLE = {}
 
     def __init__(self,db,minSup) -> None:
         self.DATABASE = db
@@ -23,31 +22,36 @@ class Table:
                 if tempSet not in self.TABLE: # Add to table
                     self.TABLE[tempSet] = 1 
                 else: # Increase count/support level
-                    self.TABLE[tempSet] += 1            
+                    self.TABLE[tempSet] += 1   
+        self.prune()    
+        self.SUPPORT_TABLE.update(self.TABLE)     
 
-    # Joins itemssets
-    def createNextTable(self):
+    # Joins itemssets 
+    def createNextTable(self,k):
         nextTable = {}
         # Get list of itemsets
         keys = list(self.TABLE.keys())
         # Join itemsets
         for i in range(len(keys)):
             for j in range(i+1,len(keys)):
+                flag = False
                 newKey = set()
                 set0 = keys[i]
                 set1 = keys[j]
 
-                # Pruning
-                if self.TABLE[set0] >= self.SUPPORT_LEVEL and self.TABLE[set1] >= self.SUPPORT_LEVEL:
-                    newKey = set0.union(set1)
-                # Check for infrequent subset
-                # Only add newKey if not an infrequent subset
-                for item in newKey:
-                    subset = newKey - {item}
-                    if subset not in keys or self.TABLE[subset] < self.SUPPORT_LEVEL:
-                        break
-                nextTable[frozenset(newKey)] = 0
-        self.TABLE = nextTable
+                newKey = set0.union(set1)
+                if len(newKey) == k:
+                    # Check for infrequent subset
+                    # Only add newKey if not an infrequent subset
+                    for item in newKey:
+                        subset = newKey - {item}
+                        if subset not in self.TABLE or self.TABLE[subset] < self.SUPPORT_LEVEL:
+                            flag = True
+                            break
+                    # Stops empty keys or keys of varying size from being added to tables
+                    if not flag:
+                        nextTable[frozenset(newKey)] = 0
+        return nextTable
 
     # Adds supports
     def fillTable(self):
@@ -55,97 +59,95 @@ class Table:
             for key in self.TABLE.keys():
                 if key.issubset(item):
                     self.TABLE[key] += 1
+        self.prune() 
+        self.SUPPORT_TABLE.update(self.TABLE)  
+    
+    def prune(self):
+        temp = self.TABLE.copy()
+        for key in temp.keys():
+            if self.TABLE[key] < self.SUPPORT_LEVEL:
+                del self.TABLE[key]
 
     def getTable(self) -> dict:
         return self.TABLE
+
+    def getSupports(self) -> dict:
+        return self.SUPPORT_TABLE
+
+    def setTable(self,table):
+        self.TABLE = table
     
 class Apriori:
     SUPPORT      = int
     TRANSACTIONS = []
     FINAL_TABLE  = Table
+    CONFIDENCE   = int
+    SUBSETS      = list
+    RULES        = list
+
 
     def __init__(self) -> None:
+        # Init Confidence and Support level
         try:
-            self.SUPPORT_LEVEL = int(sys.argv[2])
+            self.CONFIDENCE = int(sys.argv[3])
+            self.SUPPORT    = int(sys.argv[2])
         except ValueError:
-            print(sys.argv[2], 'is not a number!')
+            print('Confidence and support levels must be entered as numbers.')
             exit()
         except IndexError:
-            print('Make sure you enter the filepath and support level!')
+            print('Make sure you enter the filepath, support and confidence level level!')
             exit()
         # Read in transactions from file
         self.readFile(sys.argv[1])
-        # Create first table from transactions
-        table = Table(self.TRANSACTIONS,self.SUPPORT)
-        table.initTable()
-        print(table.getTable())
+        t0 = timer()
         # Begin loop
-        table.createNextTable()
-        table.fillTable()
-        print(table.getTable())
-        # done = False
-        # while not done:
-        #     pass
-        # t0 = timer()
-        # self.FINAL_TABLE = self.apriori(self.TABLE,1)
-        # t1 = timer()
-        # self.getRunTime(t0,t1)
-        
+        done = False
+        k = 1
+        table = Table(self.TRANSACTIONS,self.SUPPORT)
+        while not done:
+            if k == 1: # Create first table from transactions
+                table.initTable()
+                table.setTable(table.getTable())
+                k+=1
+                continue
+            temp = table.createNextTable(k)
+            if len(temp) > 0:
+                table.setTable(temp)
+                table.fillTable()
+                k+=1
+            else:
+                self.FINAL_TABLE = table
+                done = True
+        print('Final table',self.FINAL_TABLE.getTable())
+        print('Sup table',self.FINAL_TABLE.getSupports())
+        self.SUBSETS = self.powerset(self.FINAL_TABLE.getTable().keys())
+        print(self.getRules())
+        t1 = timer()
+        self.getRunTime(t0,t1)
 
-    def initTable(self):
-        counts = Counter()
-        for key in self.DATASET:
-            counts = counts + Counter(self.DATASET[key])
-        self.TABLE = dict(counts)
-
-    def addSupports(self,table) -> dict:
-        for dbKey in self.DATASET:
-            for key in table:
-                if set(key).issubset(self.DATASET[dbKey]):
-                    table[key]+=1
-        return table
-        
-
-    def createSets(self,table,k) -> list:
-        # Create a set of all unique table values
-        if k == 1:
-            setItems = set(key for key in table)
-        else:
-            setItems = set(value for key in table for value in key)
-        # Return a list of combinations of size k given the above set items
-        return list(combinations(setItems,k))
-
-    def prune(self,table) -> dict:
-        iterTable = table.copy()
-        for key in iterTable:
-            if iterTable[key] < self.SUPPORT:
-                del table[key]
-        return table
-
-    def apriori(self,table,k) -> dict:
-        # Create next table
-        #   Get combinations for next table
-        #   Create new Dictionary for combinations
-        #   Add supports to dictionary        
-        sets = self.createSets(table,k)
-        nextTable = dict.fromkeys(sets,0)
-        nextTable = self.addSupports(nextTable)
-        # Prune table
-        nextTable = self.prune(nextTable)
-        # Check for final table
-        if len(nextTable) > 0 and k < len(self.TABLE) + 1:
-            k+=1
-            self.apriori(nextTable,k)
-        else:
-            print('Final table: ',table)
-            return table
+    def powerset(self,itemSets):
+        powerset = []
+        for item in itemSets:
+            for subset in chain.from_iterable(combinations(item,i) for i in range(len(item) + 1)):
+                powerset.append(frozenset(subset))
+        return powerset[1:-1]
+            
+    def getRules(self):
+        supportTable = self.FINAL_TABLE.getSupports()
+        rules = []
+        for key in self.FINAL_TABLE.getTable().keys():
+            for subset in self.SUBSETS:
+                if (supportTable[key] / supportTable[subset]) * 100 > self.CONFIDENCE:
+                    rules.append(subset)
+        return rules
 
     def getRunTime(self,t0,t1):
         totalRunTime = t1-t0
-        if totalRunTime < 1000:
+        if totalRunTime < 1:
             print('Total runtime: ',round(totalRunTime*1000,3),'ms')
         else:
             print('Total runtime: ',round(totalRunTime,3),'sec')
+
 
     def readFile(self,file:str): 
         try:
@@ -155,16 +157,16 @@ class Apriori:
                 # Parse Transactions after first line in file
                     # Strip newline from end of string
                     # Split string into list of ints 
-                # Init num transactions
-                self.NUM_TRANSACTIONS = int(lines[0])
-                # Init support
-                self.SUPPORT = floor(self.NUM_TRANSACTIONS * (self.SUPPORT_LEVEL / 100))
-                print("Support level: ",self.SUPPORT)
                 for line in lines[1:]:
                     row = re.split(r'\t+',line)[-1].rstrip('\r\n').split()
                     self.TRANSACTIONS.append(row)
-            print('Transactions: ',self.TRANSACTIONS)
         except FileNotFoundError:
             print("Couldn't find file:",file,':(')
             exit()
+    
+    def writeFile(self):
+        with open('output.txt','w') as f:
+            f.write('|FPS| = ',len(self.RULES))
+            for rule in self.RULES:
+                pass
 Apriori()
