@@ -1,3 +1,4 @@
+import math
 import re
 import sys
 from timeit import default_timer as timer
@@ -49,7 +50,7 @@ class Table:
                             break
                     # Only add newKey if not an infrequent subset
                     if not flag:
-                        nextTable[frozenset(newKey)] = 0
+                        nextTable[frozenset(newKey)] = 0                
         return nextTable
 
     # Adds supports to a table Ck then prunes table to create Lk
@@ -78,28 +79,15 @@ class Table:
     
 class Apriori:
     SUPPORT      = int
+    TOTAL_TRANSACTIONS = int
     TRANSACTIONS = []
     FINAL_TABLE  = Table
-    CONFIDENCE   = int
     SUBSETS      = []
     RULES        = set()
 
-
     def __init__(self) -> None:
-        # Init Confidence and Support level
-        try:
-            self.CONFIDENCE = int(sys.argv[3])
-            self.SUPPORT    = int(sys.argv[2])
-        except ValueError:
-            print('Confidence and support levels must be entered as numbers.')
-            exit()
-        except IndexError:
-            print('Make sure you enter the filepath, support and confidence level level!')
-            exit()
-            
         # Read in transactions from file
         self.readFile(sys.argv[1])
-
         # Begin creating tables
         done = False
         k = 1
@@ -120,10 +108,9 @@ class Apriori:
             else:
                 self.FINAL_TABLE = table
                 done = True
-
         #  Create subsets from frequent itemsets and init association rules
         self.SUBSETS = self.powerset(self.FINAL_TABLE.getTable().keys())
-        self.RULES   = self.getRules()
+        self.RULES   = self.getFrequentPatterns()
         t1 = timer()
         print('|FPs| = ' + str(len(self.RULES)))
         self.writeFile()
@@ -136,18 +123,13 @@ class Apriori:
             for subset in chain.from_iterable(combinations(item,i) for i in range(len(item) + 1)):
                 if len(subset) > 0: # Prevents empty sets from being added 
                     powerset.add(frozenset(subset))
-        return list(powerset)[1:]
+        return list(powerset)
     
     # Loops through subsets and finds association rules based on user input
-    def getRules(self):
+    def getFrequentPatterns(self):
         rules = set()
-        keys  = self.FINAL_TABLE.getTable().keys()
-        supportTable = self.FINAL_TABLE.getSupports()
-
-        for key in keys:
-            for subset in self.SUBSETS:
-                if (supportTable[key] / supportTable[subset]) * 100 > self.CONFIDENCE:
-                    rules.add(subset)
+        for subset in self.SUBSETS:                
+            rules.add(subset)
         return rules
 
     def getRunTime(self,t0,t1):
@@ -157,19 +139,26 @@ class Apriori:
         else:
             print('Total runtime: ',round(totalRunTime,3),'sec')
 
-
     def readFile(self,file:str): 
         try:
             with open(file, 'r', encoding='utf-8') as f:
                 # Pull lines from file
                 lines = f.readlines()
-
+                self.TOTAL_TRANSACTIONS = lines[0]
+                # Init Support level
+                self.SUPPORT = math.ceil(float(self.TOTAL_TRANSACTIONS) * (float(sys.argv[2]) / 100))
                 for line in lines[1:]:
                     # Only grab the transactions from each row in the file
                     row = re.split(r'\t+',line)[-1].rstrip('\r\n').split()
                     self.TRANSACTIONS.append(row) # Add transaction to class transaction list
         except FileNotFoundError:
             print("Couldn't find file:",file,':(')
+            exit()
+        except ValueError:
+            print('Support level must be entered as a number!')
+            exit()
+        except IndexError:
+            print('Make sure you enter the filepath and support level!')
             exit()
     
     def writeFile(self):
